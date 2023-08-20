@@ -1,3 +1,4 @@
 .env
 temp/*
 chunks/*
+__pycache__/

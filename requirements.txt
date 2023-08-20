@@ -1,0 +1,11 @@
+pytube
+pydub
+requests
+openai
+tiktoken
+chromadb
+langchain
+python-dotenv
+pyAudioAnalysis
+eyed3
+scikit-learn
