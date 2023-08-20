@@ -24,11 +24,9 @@ jobs:
         ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        echo "AWS_REGION: $AWS_REGION"
-        echo "ECR_REPOSITORY: $ECR_REPOSITORY"
-        echo "OPENAI_API_KEY: $OPENAI_API_KEY"
         docker buildx create --use
         docker buildx build -t $ECR_REPOSITORY:latest .
         docker buildx build -t $ECR_REPOSITORY:${{ github.sha }} .
         docker buildx build --push -t $ECR_REPOSITORY:latest .
         docker buildx build --push -t $ECR_REPOSITORY:${{ github.sha }} .
+        docker buildx build --push -t $ECR_REPOSITORY:latest . --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
