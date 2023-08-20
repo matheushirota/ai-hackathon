@@ -11,3 +11,6 @@ eyed3
 scikit-learn
 pymysql
 boto3
+reportlab
+Pillow
+apscheduler
