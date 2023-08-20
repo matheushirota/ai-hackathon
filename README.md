@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="#" target="blank"><img src="https://bard-ai-bucket.s3.amazonaws.com/sumarise-login.png" width="120" alt="Sumarise Logo" /></a>
+</p>
+
 ## Description
 
 This repository contains one of three parts of the project for Hackathon 2023, organized by Quero Educação.
