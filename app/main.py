@@ -12,7 +12,7 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from PIL import Image as PILImage
 from io import BytesIO
 import os
@@ -37,6 +37,8 @@ cursor = connection.cursor(pymysql.cursors.DictCursor)
 def exec_queue():
     cursor.execute('SELECT * FROM summary_queues WHERE status != "DONE" AND retries < 3 ORDER BY created_at DESC LIMIT 1')
     results = cursor.fetchall()
+    if not results:
+        return
     for result in results:
         try:
             query_update_status = 'UPDATE summary_queues SET status = "{status}", retries = {retries} WHERE id = "{summary_id}"'
@@ -62,12 +64,19 @@ def exec_queue():
                     grade = profile['grade']
                     mode = profile['mode']
                     summary_id = result['summary_id']
-                    youtube(link, category, grade, summary_id, mode)
-                    return
+
+                    query_get_summaries = 'SELECT * FROM summaries WHERE id = "{summary_id}"'
+                    query_get_summaries_formatted = query_get_summaries.format(summary_id=result['summary_id'])
+                    cursor.execute(query_get_summaries_formatted)
+                    summaries = cursor.fetchall()
+                    for summary in summaries:
+                        summary_title = summary['title']
+                        youtube(link, category, grade, summary_id, mode, summary_title)
+                        return
             else:
                 return
 
-def youtube(uri: str, category: str, grade: str, summary_id: str, mode: str):
+def youtube(uri: str, category: str, grade: str, summary_id: str, mode: str, summary_title: str):
     path_audio = download_audio_from_youtube(uri)
     check_chunk = split_audio_into_chunks(path_audio['path'])
     transcriptions = []
@@ -88,7 +97,7 @@ def youtube(uri: str, category: str, grade: str, summary_id: str, mode: str):
     summarization = summarize_langchain(merged_transcription, category, grade, mode)
     
     llm = ChatOpenAI(temperature=.7)
-    template = """Você irá receber um texto e deverá extrair o contexto dele, com base nesse contexto você deverá gerar 3 descrições de imagens para esse contexto
+    template = """Você irá receber um texto e deverá extrair o contexto dele, com base nesse contexto você deverá gerar 3 descrições de imagens para esse contexto, as 3 descrições não podem conter temas probidos pela OpenAI em prompts
     Texto: {text}
     Descrições:
     """
@@ -113,16 +122,32 @@ def youtube(uri: str, category: str, grade: str, summary_id: str, mode: str):
 
     paragraphs = summarization.split('\n\n')
 
+    bard_style_text = ParagraphStyle(
+        "bard_style_text",
+        parent=getSampleStyleSheet()["Normal"],
+        fontSize=14,
+        leading=24
+    )
+
+    bard_style_title = ParagraphStyle(
+        "bard_style_title",
+        parent=getSampleStyleSheet()["Normal"],
+        fontSize=18,
+        leading=28,
+        textColor="#3498DB"
+    )
+
+    story.append(Paragraph(summary_title, bard_style_title))
+    story.append(Spacer(1, 10))
     for idx, paragraph in enumerate(paragraphs):
-        styles = getSampleStyleSheet()
-        story.append(Paragraph(paragraph, styles['Normal']))
-        story.append(Spacer(1, 15))
+        story.append(Paragraph(paragraph, bard_style_text))
+        story.append(Spacer(1, 5))
         if idx < 3:
             image_data = BytesIO(requests.get(images[idx]).content)
             img = PILImage.open(image_data)
             width, height = img.size
             aspect = height / float(width)
-            img_width = 512
+            img_width = 455
             img_height = img_width * aspect
             img = Image(image_data, width=img_width, height=img_height)
             story.append(img)
