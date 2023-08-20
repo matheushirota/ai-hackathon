@@ -37,6 +37,7 @@ cursor = connection.cursor(pymysql.cursors.DictCursor)
 def exec_queue():
     cursor.execute('SELECT * FROM summary_queues WHERE status != "DONE" AND retries < 3 ORDER BY created_at DESC LIMIT 1')
     results = cursor.fetchall()
+    print(results)
     if not results:
         return
     for result in results:
