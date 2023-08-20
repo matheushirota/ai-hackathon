@@ -37,6 +37,7 @@ cursor = connection.cursor(pymysql.cursors.DictCursor)
 def exec_queue():
     cursor.execute('SELECT * FROM summary_queues WHERE status != "DONE" AND retries < 3 ORDER BY created_at DESC LIMIT 1')
     results = cursor.fetchall()
+    connection.commit()
     print(results)
     if not results:
         return
@@ -53,12 +54,14 @@ def exec_queue():
         query_file_input_formatted = query_get_file_input.format(summary_id=result['summary_id'])
         cursor.execute(query_file_input_formatted)
         file_inputs = cursor.fetchall()
+        connection.commit()
         for file in file_inputs:
             if file['type'] == 'LINK':
                 query_get_profiles = 'SELECT * FROM profiles WHERE summary_id = "{summary_id}"'
                 query_get_profiles_formatted = query_get_profiles.format(summary_id=result['summary_id'])
                 cursor.execute(query_get_profiles_formatted)
                 profiles = cursor.fetchall()
+                connection.commit()
                 for profile in profiles:
                     link = file['public_url']
                     category = profile['subject']
@@ -70,6 +73,7 @@ def exec_queue():
                     query_get_summaries_formatted = query_get_summaries.format(summary_id=result['summary_id'])
                     cursor.execute(query_get_summaries_formatted)
                     summaries = cursor.fetchall()
+                    connection.commit()
                     for summary in summaries:
                         summary_title = summary['title']
                         youtube(link, category, grade, summary_id, mode, summary_title)
