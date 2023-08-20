@@ -1,0 +1,31 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Build and push Docker image
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION: ${{ env.AWS_REGION }}
+        ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        docker buildx create --use
+        docker buildx build -t $ECR_REPOSITORY:latest .
+        docker buildx build -t $ECR_REPOSITORY:${{ github.sha }} .
+        docker buildx build --push -t $ECR_REPOSITORY:latest .
+        docker buildx build --push -t $ECR_REPOSITORY:${{ github.sha }} .
