@@ -4,7 +4,6 @@ from pydub import AudioSegment
 def split_audio_into_chunks(input_audio_path, chunk_size_seconds=120, max_chunk_size_bytes=26214400):
     audio_file_size = os.path.getsize(input_audio_path)
     if audio_file_size > max_chunk_size_bytes:
-        print(f"Audio file is larger than {max_chunk_size_bytes} bytes, splitting into chunks.")
         song = AudioSegment.from_file(input_audio_path)
         chunk_size = chunk_size_seconds * 1000
         os.makedirs("chunks", exist_ok=True)
@@ -16,5 +15,4 @@ def split_audio_into_chunks(input_audio_path, chunk_size_seconds=120, max_chunk_
             chunk_paths.append(chunk_output_path)
         return chunk_paths
     else:
-        print("Audio file is smaller than the maximum chunk size, no need to split.")
         return [input_audio_path]

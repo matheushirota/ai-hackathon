@@ -10,3 +10,4 @@ pyAudioAnalysis
 eyed3
 scikit-learn
 pymysql
+boto3
