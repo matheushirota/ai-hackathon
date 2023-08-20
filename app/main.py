@@ -1,6 +1,5 @@
 import tempfile
 import openai
-import mysql.connector
 from fastapi import FastAPI
 from langchain.chat_models import ChatOpenAI
 import pymysql
@@ -11,9 +10,7 @@ from app.modules.transcribe.whisper import transcribe_audio
 from app.modules.summarize.langchain import summarize_langchain
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.chains import SimpleSequentialChain
 from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet
 from PIL import Image as PILImage
@@ -21,7 +18,10 @@ from io import BytesIO
 import os
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(), override=True)
-#openai.api_key = os.environ["OPENAI_API_KEY"]
+import boto3
+from botocore.exceptions import NoCredentialsError
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 app = FastAPI()
 
@@ -32,11 +32,10 @@ connection = pymysql.connect(
     password=os.environ["RDS_PASSWORD"],
     database=os.environ["RDS_DATABASE"],
 )
+cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-@app.get('/get-queue')
-def list_queue():
-    cursor = connection.cursor(pymysql.cursors.DictCursor)
-    cursor.execute('SELECT * FROM summary_queues WHERE status = "PENDING" AND retries < 3 ORDER BY created_at DESC LIMIT 1')
+def exec_queue():
+    cursor.execute('SELECT * FROM summary_queues WHERE status != "DONE" AND retries < 3 ORDER BY created_at DESC LIMIT 1')
     results = cursor.fetchall()
     for result in results:
         try:
@@ -61,16 +60,14 @@ def list_queue():
                     link = file['public_url']
                     category = profile['subject']
                     grade = profile['grade']
-                    youtube(link, category, grade)
-                    cursor.close()
-                    connection.close()
+                    mode = profile['mode']
+                    summary_id = result['summary_id']
+                    youtube(link, category, grade, summary_id, mode)
                     return
             else:
-                cursor.close()
-                connection.close()
                 return
 
-def youtube(uri: str, category: str, grade: str):
+def youtube(uri: str, category: str, grade: str, summary_id: str, mode: str):
     path_audio = download_audio_from_youtube(uri)
     check_chunk = split_audio_into_chunks(path_audio['path'])
     transcriptions = []
@@ -88,7 +85,7 @@ def youtube(uri: str, category: str, grade: str):
             transcription = transcribe_audio(chunk_path)
             transcriptions.append(transcription)
     merged_transcription = '\n'.join([item['text'] for item in transcriptions])
-    summarization = summarize_langchain(merged_transcription, category, grade, 'no')
+    summarization = summarize_langchain(merged_transcription, category, grade, mode)
     
     llm = ChatOpenAI(temperature=.7)
     template = """Você irá receber um texto e deverá extrair o contexto dele, com base nesse contexto você deverá gerar 3 descrições de imagens para esse contexto
@@ -110,7 +107,7 @@ def youtube(uri: str, category: str, grade: str):
             image_data = response["data"][0]["url"]
             images.append(image_data)
 
-    output_pdf = "output.pdf"
+    output_pdf = "temp_output.pdf"
     doc = SimpleDocTemplate(output_pdf, pagesize=letter)
     story = []
 
@@ -132,4 +129,33 @@ def youtube(uri: str, category: str, grade: str):
             story.append(Spacer(1, 5))
     
     doc.build(story)
-    print(f"PDF criado com sucesso: {output_pdf}")
+    upload_to_aws(output_pdf, 'bard-ai-bucket', summary_id + '.pdf', summary_id)
+
+def upload_to_aws(local_file: str, bucket: str, s3_file: str, summary_id: str):
+    s3 = boto3.client('s3', aws_access_key_id=os.environ["AWS_ACCESS_KEY"], aws_secret_access_key=os.environ["AWS_SECRET_KEY"])
+    try:
+        upload = s3.upload_file(local_file, bucket, s3_file)
+        try:
+            query_update_status = 'UPDATE summary_queues SET status = "{status}" WHERE summary_id = "{summary_id}"'
+            query_formated = query_update_status.format(status="DONE", summary_id=summary_id)
+            cursor.execute(query_formated)
+            connection.commit()
+            query_update_summaries = 'UPDATE summaries SET status = "{status}", file_path = "{file_path}" WHERE id = "{summary_id}"'
+            s3Uri = "https://bard-ai-bucket.s3.amazonaws.com/" + s3_file
+            query_summaries_formated = query_update_summaries.format(status="done", file_path=s3Uri, summary_id=summary_id)
+            cursor.execute(query_summaries_formated)
+            connection.commit()
+            return True
+        except Exception as e:
+            print("Exeception occured:{}".format(e))
+            return False
+    except FileNotFoundError:
+        print("The file was not found")
+        return False
+    except NoCredentialsError:
+        print("Credentials not available")
+        return False
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(exec_queue, trigger=CronTrigger(second='0'))
+scheduler.start()
