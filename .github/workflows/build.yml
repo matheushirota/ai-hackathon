@@ -20,8 +20,8 @@ jobs:
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION: ${{ env.AWS_REGION }}
-        ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+        AWS_REGION: $AWS_REGION
+        ECR_REPOSITORY: $ECR_REPOSITORY
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         echo "AWS_REGION: $AWS_REGION"
